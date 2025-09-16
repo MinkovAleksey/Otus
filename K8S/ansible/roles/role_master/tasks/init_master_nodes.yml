@@ -1,0 +1,91 @@
+---
+- name: Check if kubelet.conf exists
+  stat:
+    path: "/etc/kubernetes/kubelet.conf"
+  register: kubelet_conf
+
+- name: init master
+  shell: > 
+    kubeadm init --pod-network-cidr={{ PROD_NETWORK_CIDR }}
+    --control-plane-endpoint {{ KEEPALIVED_VIRTUAL_IPASSRESS }}:6443
+    --apiserver-advertise-address {{ KEEPALIVED_VIRTUAL_IPASSRESS }}
+    --service-dns-domain {{ SERVICE_DNS_DOMAIN }}
+    --upload-certs
+  register: kubeadm_init
+  when: (ansible_hostname == groups['masters'][0]) and (kubelet_conf.stat.exists == false)
+
+- name: Add directory for config file
+  file:
+    path: /root/.kube
+    state: directory
+  when: (ansible_hostname == groups['masters'][0]) and (kubelet_conf.stat.exists == false)
+
+- name: Add link for config file
+  file:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/admin.conf
+    state: link
+  when: (ansible_hostname == groups['masters'][0]) and (kubelet_conf.stat.exists == false)
+
+- name: Generate join token
+  shell: kubeadm token create
+  register: join_token
+  when: ansible_hostname == groups['masters'][0]
+
+- name: Get discovery-token-ca-cert-hash
+  shell: openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'
+  register: discovery_token_ca_cert_hash
+  when: ansible_hostname == groups['masters'][0]
+
+- name: Upload certs
+  shell: kubeadm init phase upload-certs --upload-certs | tail -1
+  register: certificate_key
+  when: ansible_hostname == groups['masters'][0]
+
+- name: debug
+  debug:
+    var: to_debug
+  vars:
+    to_debug:
+      var1: "{{ kubeadm_init.stdout_lines }}"
+      join_token_var: "{{ hostvars[groups['masters'][0]].join_token.stdout }}"
+      discovery_token_ca_cert_hash_var: "{{ hostvars[groups['masters'][0]].discovery_token_ca_cert_hash.stdout }}"
+      certificate_key_var: "{{ hostvars[groups['masters'][0]].certificate_key.stdout }}"
+      add_masters_var: >-
+        "kubeadm join {{ KEEPALIVED_VIRTUAL_IPASSRESS }}:6443
+        --token {{ hostvars[groups['masters'][0]].join_token.stdout }}
+        --discovery-token-ca-cert-hash sha256:{{ hostvars[groups['masters'][0]].discovery_token_ca_cert_hash.stdout }}
+        --control-plane --certificate-key {{ hostvars[groups['masters'][0]].certificate_key.stdout }}"
+      add_workers_var: >-
+        "kubeadm join {{ KEEPALIVED_VIRTUAL_IPASSRESS }}:6443
+        --token {{ hostvars[groups['masters'][0]].join_token.stdout }}
+        --discovery-token-ca-cert-hash sha256:{{ hostvars[groups['masters'][0]].discovery_token_ca_cert_hash.stdout }}"
+  when: ansible_hostname == groups['masters'][0]
+
+- name: Check if kubeadm has already run
+  stat:
+    path: "/etc/kubernetes/pki/ca.key"
+  register: kubeadm_ca
+
+- name: Check if kubeadm has already run
+  stat:
+    path: "/etc/kubernetes/pki/ca.key"
+  register: kubeadm_ca_var
+
+- name: Join control-plane nodes
+  when: (hostvars[groups['masters'][0]].kubeadm_ca.stat.exists) and (ansible_hostname != 'master') and (not kubeadm_ca_var.stat.exists)
+  shell:
+    cmd: >-
+      kubeadm join {{ KEEPALIVED_VIRTUAL_IPASSRESS }}:6443
+      --token {{ hostvars[groups['masters'][0]].join_token.stdout }}
+      --discovery-token-ca-cert-hash sha256:{{ hostvars[groups['masters'][0]].discovery_token_ca_cert_hash.stdout }}
+      --control-plane --certificate-key {{ hostvars[groups['masters'][0]].certificate_key.stdout }}
+
+- name: Fetch the file from the master to ansible
+  run_once: true
+  fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: temp/
+    flat: yes
+  when: ansible_hostname == groups['masters'][0]
+...

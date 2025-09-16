@@ -1,0 +1,8 @@
+---
+- name: role_jaeger
+  hosts: client
+  become: yes
+
+  roles:
+    - role: role_jaeger
+...

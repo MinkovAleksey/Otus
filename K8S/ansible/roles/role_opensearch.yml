@@ -1,0 +1,8 @@
+---
+- name: role_opensearch
+  hosts: client
+  become: true
+
+  roles:
+    - role: role_opensearch
+...

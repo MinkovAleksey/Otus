@@ -1,0 +1,150 @@
+---
+- name: Set a configs
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: values-longhorn-helm.yaml.j2
+      dest: /root/k8s/values-longhorn-helm.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+
+- name: Check longhorn repo
+  ansible.builtin.shell:
+    cmd: helm repo list | grep longhorn
+  register: longhorn_repo_status
+  ignore_errors: true
+
+- name: Display longhorn_repo_status
+  debug:
+    msg: "{{ longhorn_repo_status }}"
+
+- name: Add helm repository for the longhorn
+  ansible.builtin.shell:
+    cmd: helm repo add longhorn https://charts.longhorn.io
+  register: need_update
+  when: 'not "longhorn" in longhorn_repo_status.stdout'
+
+- name: Update helm repository
+  ansible.builtin.shell:
+    cmd: helm repo update
+  when: need_update is changed
+
+- name: Check longhorn
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n longhorn-system
+  register: longhorn_status
+
+- name: Display ingress_nginx_status
+  debug:
+    msg: "{{ longhorn_status }}"
+
+- name: Install longhorn
+  ansible.builtin.shell:
+    cmd: >-
+      helm install longhorn longhorn/longhorn
+      --values /root/k8s/values-longhorn-helm.yaml
+      -n longhorn-system
+      --create-namespace
+  when: "'No ' in longhorn_status.stderr"
+  register: longhorn_has_instaled_now
+
+- name: Generate auth string for Longhorn
+  ansible.builtin.shell:
+    cmd: |
+      echo -n "{{ LONGHORN_PASS }}" | openssl passwd -stdin -apr1
+  register: longhorn_pass_hashed
+
+- name: Combine username and hashed password
+  ansible.builtin.set_fact:
+    longhorn_auth: "{{ LONGHORN_USER }}:{{ longhorn_pass_hashed.stdout }}"
+
+- name: Set a configs
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: 00-basic-auth-secret.yaml.j2
+      dest: /root/k8s/00-basic-auth-secret.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: 01-ingress-ui.yaml.j2
+      dest: /root/k8s/01-ingress-ui.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: 02-storage-class.yaml.j2
+      dest: /root/k8s/02-storage-class.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+
+- name: Put lables
+  ansible.builtin.shell:
+    cmd: "kubectl label nodes {{ item }} data=true"
+  with_items: "{{ groups['workers'] }}"
+  ignore_errors: true
+
+- name: Check Longhorn app
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n longhorn-system
+  until: not "0/" in pods_status_longhorn.stdout
+  retries: 50 # Пофторять 24 * 10 секунд = 240 секунд = 4 минуты
+  delay: 10 # каждые 5 секунд
+  register: pods_status_longhorn
+
+- name: Apply configs
+  ansible.builtin.shell:
+    cmd: "kubectl -n longhorn-system apply -f {{ item }}"
+  loop:
+    - "/root/k8s/00-basic-auth-secret.yaml"
+    - "/root/k8s/01-ingress-ui.yaml"
+    - "/root/k8s/02-storage-class.yaml"
+
+- name: Check Longhorn app
+  ansible.builtin.uri:
+    url: 'http://longhorn.{{ DOMAIN }}'
+    return_content: true
+    validate_certs: false
+    status_code:
+      - 401
+  until: uri_output.status == 401
+  retries: 24 # Пофторять 24 * 10 секунд = 240 секунд = 4 минуты
+  delay: 10 # каждые 5 секунд
+  register: uri_output
+
+- name: Check Longhorn
+  ansible.builtin.debug:
+    msg: >-
+      "Longhorn доступна по http://longhorn.{{ DOMAIN }}"
+      Пожалуйста не забудте повесить tag Data на ноды в UI...
+
+- name: Display torageclass in k8s
+  ansible.builtin.shell:
+    cmd: kubectl get storageclass
+  register: list_storage_class
+
+- name: Display list_storage_class
+  debug:
+    msg: "{{ list_storage_class }}"
+
+- name: Disable longhorn (default)
+  ansible.builtin.shell:
+    cmd: |
+      kubectl patch storageclass longhorn -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+  when: "'longhorn (default)' in list_storage_class.stdout"
+
+- name: Set data-cold default
+  ansible.builtin.shell:
+    cmd: |
+      kubectl patch storageclass data-cold -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+  when: "'data-cold (default)' not in list_storage_class.stdout"
+...

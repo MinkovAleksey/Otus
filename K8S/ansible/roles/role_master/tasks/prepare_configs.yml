@@ -1,0 +1,224 @@
+---
+# Добавили репозиторий
+- name: Add crio keyring
+  ansible.builtin.apt_key:
+    url: "{{ item }}"
+    state: present
+  loop:
+    - https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ CRIO_VERSION }}/{{ OS }}/Release.key
+    - https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ OS }}/Release.key
+
+# Добавили ключи
+- name: Apply kubernetes-apt-keyring.gpg
+  ansible.builtin.shell:
+    cmd: >-
+      curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{ K8S_VERSION }}/deb/Release.key |
+      sudo gpg --yes --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# Установили нужные покеты на ноду
+- name: Install a list of system packages
+  ansible.builtin.apt:
+    pkg:
+    - iptables
+    - keepalived
+    - haproxy
+    - vim
+    - apt-transport-https
+    - ca-certificates
+    - gpg
+    - ethtool
+    update_cache: true
+
+# Добавили конфиги
+- name: Set a configs master
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: keepalived.conf.j2
+      dest: /etc/keepalived/keepalived.conf
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: check_apiserver.sh.j2
+      dest: /etc/keepalived/check_apiserver.sh
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: haproxy.cfg.j2
+      dest: /etc/haproxy/haproxy.cfg
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: k8s.conf.j2
+      dest: /etc/modules-load.d/k8s.conf
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: crio.list.j2
+      dest: /etc/apt/sources.list.d/crio.list
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: kubernetes.list.j2
+      dest: /etc/apt/sources.list.d/kubernetes.list
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+
+# Отключили SWAP TODO надо подумать как сделать что бы не мнодиличь # а так можно определять по числу # сколько раз было запущено )
+- name: Disable SWAP
+  shell: |
+    swapoff -a
+    sed -i '/swap/s/^/#\ /'  /etc/fstab
+
+- name: Add the overlay module
+  modprobe:
+    name: overlay
+    state: present
+
+- name: Add the br_netfilter module
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Update sysctl param
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  with_items:
+    - {name: net.bridge.bridge-nf-call-iptables, value: 1}
+    - {name: net.bridge.bridge-nf-call-ip6tables, value: 1}
+    - {name: net.ipv4.ip_forward, value: 1}
+
+- name: Enable a keepalived/haproxy
+  systemd_service:
+    name: "{{ item.name }}"
+    state: "{{ item.state }}"
+    enabled: "{{ item.enabled }}"
+  loop:
+    - name: haproxy
+      state: started
+      enabled: true
+    - name: keepalived
+      state: started
+      enabled: true
+
+- name: Install a list of CRIO and K8S packages
+  ansible.builtin.apt:
+    pkg:
+      - cri-o
+      - cri-o-runc
+      - kubeadm
+      - kubectl
+      - kubelet
+    update_cache: true
+  register: need_restart_CRIO
+  until: need_restart_CRIO is succeeded
+  retries: 10
+  delay: 10
+
+- name: Hold CRIO/K8S packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - cri-o
+    - cri-o-runc
+    - kubeadm
+    - kubectl
+    - kubelet
+
+# Копируем конфиг если определена переменная REGISTRY_PROXY в файле переменных
+- name: Coppy config /etc/containers/registries.conf.d/registries.conf for crio
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: registries.conf.j2
+      dest: /etc/containers/registries.conf.d/registries.conf
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+  when: REGISTRY_PROXY != ""
+  register: need_restart_by_registries
+
+# Генерируем строку авторизации и сохраняем в переменную если определена переменная REGESTRY_PROXY_PASS в файле переменных
+- name: Generate BASE64_ENCODED_USERNAME_PASSWORD for crio
+  ansible.builtin.shell:
+    cmd: |
+      echo -n "{{ REGISTRY_PROXY_USER }}:{{ REGISTRY_PROXY_PASS }}" | base64
+  register: registry_pass_base64_crio
+  when: REGISTRY_PROXY_PASS != ""
+
+# Копируем конфиг если определена переменная REGESTRY_PROXY_PASS в файле переменных
+- name: Set /etc/containers/auth.json for crio
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: auth.json.j2
+      dest: /etc/containers/auth.json
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+  when: registry_pass_base64_crio is changed
+  register: need_restart_by_auth
+
+- name: restart_crio
+  ansible.builtin.service:
+    name: crio
+    state: restarted
+    daemon_reload: true
+  when: need_restart_CRIO.changed or need_restart_by_registries.changed or need_restart_by_auth.changed
+
+- name: Get version cri-o
+  ansible.builtin.shell:
+    cmd: crictl --runtime-endpoint unix:///var/run/crio/crio.sock version
+  register: crio_ver
+  ignore_errors: true
+
+- name: restore crio (remove auth.json and registries.conf)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/containers/registries.conf.d/registries.conf
+    - /etc/containers/auth.json
+  when: crio_ver.failed
+
+- name: INFO_ config changes was ralled (removed auth.json and registries.conf)
+  debug:
+    msg: "INFO_ config changes was ralled (removed auth.json and registries.conf)"
+  when: crio_ver.failed
+
+- name: Get version cri-o
+  ansible.builtin.shell:
+    cmd: crictl --runtime-endpoint unix:///var/run/crio/crio.sock version
+  register: crio_ver
+
+- name: display version cri-o
+  debug:
+    msg: "{{ crio_ver.stdout_lines }}"
+
+- name: Enable a keepalived/haproxy
+  systemd_service:
+    name: "{{ item.name }}"
+    state: "{{ item.state }}"
+    enabled: "{{ item.enabled }}"
+  loop:
+    - name: kubelet
+      state: started
+      enabled: true
+...

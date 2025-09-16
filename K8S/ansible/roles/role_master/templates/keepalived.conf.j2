@@ -1,0 +1,38 @@
+# File: /etc/keepalived/keepalived.conf
+
+global_defs {
+    enable_script_security
+    script_user nobody
+}
+
+vrrp_script check_apiserver {
+  script "/etc/keepalived/check_apiserver.sh"
+  interval 3
+}
+
+vrrp_instance VI_1 {
+{% if inventory_hostname == groups['masters'][0] %}
+    state MASTER                # MASTER on master, BACKUP on slaves
+{% else %}
+    state BACKUP                # MASTER on master, BACKUP on slaves
+{% endif %}
+    interface eth0
+    virtual_router_id 5
+{% if inventory_hostname == groups['masters'][0] %}
+    priority 101                # 101 on master, 100 on slaves
+{% else %}
+    priority 100                # 101 on master, 100 on slaves
+{% endif %}
+    advert_int 1
+    nopreempt
+    authentication {
+        auth_type PASS
+        auth_pass {{ KEEPALIVED_AUTH_PASS }}
+    }
+    virtual_ipaddress {
+        {{ KEEPALIVED_VIRTUAL_IPASSRESS}}
+    }
+    track_script {
+        check_apiserver
+    }
+}

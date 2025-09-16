@@ -1,0 +1,52 @@
+crds:
+  keep: false
+
+global:
+  domain: argocd.{{ DOMAIN }}
+  logging:
+    format: json
+    # -- Set the global logging level. One of: `debug`, `info`, `warn` or `error`
+    level: info
+
+controller:
+  replicas: 1
+
+configs:
+  params:
+    server.insecure: true
+
+  # repositories:
+  #   argocd-repo:
+  #     url: https://git.minkovs.ru/minkovav/argocd
+  #     name: argocd
+  #     type: git
+
+  secret:
+    argocdServerAdminPassword: "{{ argo_htpasswd.stdout }}"
+
+## Redis
+redis:
+  enabled: true
+
+## Server
+server:
+  name: server
+  replicas: 1
+
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "argocd-issuer"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    ingressClassName: "nginx"
+    hosts:
+      - argocd.{{ DOMAIN }}
+    paths:
+      - /
+    pathType: Prefix
+    tls:
+      - hosts:
+          - argocd.{{ DOMAIN }}
+        secretName: argocd-tls
+
+    https: true

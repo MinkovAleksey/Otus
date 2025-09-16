@@ -1,0 +1,157 @@
+---
+- name: Copy files
+  ansible.builtin.copy:
+    src: "jaeger/"
+    dest: /root/k8s/jaeger/
+    owner: "root"
+    group: "root"
+    mode: "u=rw,g=r,o=r"
+
+- name: Set a configs
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "root"
+    group: "root"
+    mode: "u=rw,g=r,o=r"
+  loop:
+    - src: jaeger_values.yaml.j2
+      dest: /root/k8s/jaeger_values.yaml
+
+- name: getpods from namespace jaeger
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n jaeger
+  ignore_errors: true
+  register: getpods_jaeger
+
+- name: Display getpods_jaeger
+  ansible.builtin.debug:
+    msg: "{{ getpods_jaeger }}"
+
+- name: Install Jager
+  ansible.builtin.shell:
+    cmd: |
+      kubectl -n es exec -it master-0 -c opensearch -- keytool -import -trustcacerts -keystore trust.store -storepass changeit -alias es-root -file config/certs/ca.crt
+      kubectl -n es exec -it master-0 -c opensearch -- cat config/certs/ca.crt > es.pem
+      kubectl -n es cp master-0:trust.store trust.store -c opensearch
+      base64 trust.store > trust.store.b64
+      kubectl -n jaeger create configmap opensearch-tls --from-file=trust.store.b64 --from-file=es.pem
+      kubectl -n jaeger create secret generic opensearch-secret --from-literal=ES_PASSWORD=admin
+      helm install jaeger /root/k8s/jaeger/ -f /root/k8s/jaeger_values.yaml -n jaeger
+  ignore_errors: true
+  when: "'No ' in getpods_jaeger.stdout"
+
+- name: Install Jager
+  ansible.builtin.shell:
+    cmd: |
+      helm upgrade jaeger /root/k8s/jaeger/ -f /root/k8s/jaeger_values.yaml -n jaeger
+  ignore_errors: true
+  when: "not 'No ' in getpods_jaeger.stdout"
+
+# - name: Set a configs
+#   template:
+#     src: "{{ item.src }}"
+#     dest: "{{ item.dest }}"
+#     owner: "root"
+#     group: "root"
+#     mode: "u=rw,g=r,o=r"
+#   loop:
+#     - src: certs.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/certs.yaml
+#     - src: dashboard-sec.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/dashboard-sec.yaml
+#     - src: opensearch-action-groups.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/opensearch-action-groups.yaml
+#     - src: opensearch-config.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/opensearch-config.yaml
+#     - src: opensearch-internal-users.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/opensearch-internal-users.yaml
+#     - src: opensearch-roles-mapping.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/opensearch-roles-mapping.yaml
+#     - src: opensearch-roles.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/opensearch-roles.yaml
+#     - src: opensearch-tenats.yaml.j2
+#       dest: /root/k8s/opensearch/manifests/opensearch-tenats.yaml
+#     - src: values-dashboard.yaml.j2
+#       dest: /root/k8s/opensearch/charts/values-dashboard.yaml
+#     - src: values-data.yaml.j2
+#       dest: /root/k8s/opensearch/charts/values-data.yaml
+#     - src: values-master.yaml.j2
+#       dest: /root/k8s/opensearch/charts/values-master.yaml
+
+# - name: Check opensearch repo
+#   ansible.builtin.shell:
+#     cmd: helm repo list | grep opensearch
+#   register: opensearch_repo_status
+#   ignore_errors: true
+
+# - name: Add helm repository for the opensearch
+#   ansible.builtin.shell:
+#     cmd: helm repo add opensearch https://opensearch-project.github.io/helm-charts/
+#   register: need_update
+#   when: 'not "opensearch" in opensearch_repo_status.stdout'
+
+# - name: Update helm repository
+#   ansible.builtin.shell:
+#     cmd: helm repo update
+#   when: need_update is changed
+
+# - name: Create namespace es
+#   ansible.builtin.shell:
+#     cmd: kubectl create ns es
+#   ignore_errors: true
+
+# - name: getpods from namespace es
+#   ansible.builtin.shell:
+#     cmd: kubectl get pods -n es
+#   ignore_errors: true
+#   register: getpods_opensearch
+
+# - name: Display getpods_opensearch
+#   ansible.builtin.debug:
+#     msg: "{{ getpods_opensearch }}"
+
+# - name: Prepare opensearch
+#   ansible.builtin.shell:
+#     cmd: kubectl apply -f /root/k8s/opensearch/manifests/ -n es
+
+# - name: Install opensearch maste
+#   ansible.builtin.shell:
+#     cmd: >-
+#       helm install master opensearch/opensearch -f /root/k8s/opensearch/charts/values-master.yaml -n es --version 2.28.0
+#   when: "not 'maste' in getpods_opensearch.stdout"
+
+# - name: Install opensearch data
+#   ansible.builtin.shell:
+#     cmd: >-
+#       helm install data opensearch/opensearch -f /root/k8s/opensearch/charts/values-data.yaml -n es --version 2.28.0
+#   ignore_errors: true
+#   when: "not 'data' in getpods_opensearch.stdout"
+
+# - name: Install opensearch dashboard
+#   ansible.builtin.shell:
+#     cmd: >-
+#       helm install dashboard opensearch/opensearch-dashboards -f /root/k8s/opensearch/charts/values-dashboard.yaml -n es --version 2.25.0
+#   ignore_errors: true
+#   when: "not 'dashboard' in getpods_opensearch.stdout"
+
+# - name: Update opensearch maste
+#   ansible.builtin.shell:
+#     cmd: >-
+#       helm upgrade master opensearch/opensearch -f /root/k8s/opensearch/charts/values-master.yaml -n es --version 2.28.0
+#   when: "'master' in getpods_opensearch.stdout"
+
+# - name: Update opensearch data
+#   ansible.builtin.shell:
+#     cmd: >-
+#       helm upgrade data opensearch/opensearch -f /root/k8s/opensearch/charts/values-data.yaml -n es --version 2.28.0
+#   ignore_errors: true
+#   when: "'data' in getpods_opensearch.stdout"
+
+# - name: Update opensearch dashboard
+#   ansible.builtin.shell:
+#     cmd: >-
+#       helm upgrade dashboard opensearch/opensearch-dashboards -f /root/k8s/opensearch/charts/values-dashboard.yaml -n es --version 2.25.0
+#   ignore_errors: true
+#   when: "'dashboard' in getpods_opensearch.stdout"
+...

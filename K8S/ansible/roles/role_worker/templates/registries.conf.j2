@@ -1,0 +1,41 @@
+
+unqualified-search-registries = ["192.168.0.14:5010", "docker.io", "quay.io", "gcr.io", "k8s.gcr.io", "ghcr.io", "mcr.microsoft.com", "registry.gitlab.com"]
+
+[[registry]]
+insecure = true
+location = "192.168.0.14:5010"
+
+[[registry]]
+prefix = "docker.io"
+insecure = true
+location = "{{ REGISTRY_PROXY }}:{{ REGISTRY_PROXY_PORT }}"
+
+[[registry]]
+prefix = "quay.io"
+insecure = true
+location = "{{ REGISTRY_PROXY }}:{{ REGISTRY_PROXY_PORT }}"
+
+[[registry]]
+prefix = "gcr.io"
+insecure = true
+location = "{{ REGISTRY_PROXY }}:{{ REGISTRY_PROXY_PORT }}"
+
+[[registry]]
+prefix = "k8s.gcr.io"
+insecure = true
+location = "{{ REGISTRY_PROXY }}:{{ REGISTRY_PROXY_PORT }}"
+
+[[registry]]
+prefix = "ghcr.io"
+insecure = true
+location = "{{ REGISTRY_PROXY }}:{{ REGISTRY_PROXY_PORT }}"
+
+[[registry]]
+prefix = "mcr.microsoft.com"
+insecure = true
+location = "{{ REGISTRY_PROXY }}:{{ REGISTRY_PROXY_PORT }}"
+
+[[registry]]
+prefix = "registry.gitlab.com"
+insecure = true
+location = "{{ REGISTRY_PROXY }}:{{ REGISTRY_PROXY_PORT }}"

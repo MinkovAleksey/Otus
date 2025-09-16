@@ -1,0 +1,15 @@
+---
+- name: Check cert_manager
+  ansible.builtin.shell:
+    cmd: kubectl get -n cert-manager pods
+  register: cert_manager_status
+
+- name: Display cert_manager_status
+  debug:
+    msg: "{{ cert_manager_status }}"
+
+- name: Install cert-manager
+  ansible.builtin.shell:
+    cmd: "kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v{{ CERT_MANAGER_VER }}/cert-manager.yaml"
+  when: "'No ' in cert_manager_status.stderr"
+...

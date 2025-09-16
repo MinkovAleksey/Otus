@@ -1,0 +1,4 @@
+---
+- import_tasks: prepare_configs.yml
+- import_tasks: init_master_nodes.yml
+...

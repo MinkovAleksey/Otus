@@ -1,0 +1,16 @@
+[masters]
+m1
+m2
+m3
+
+[workers]
+w1
+w2
+w3
+
+[k8s:children]
+masters
+workers
+
+[client]
+c1

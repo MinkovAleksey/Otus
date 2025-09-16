@@ -1,0 +1,56 @@
+loki-distributed:
+  global:
+    clusterDomain: "minkovs.ru"
+    dnsService: "kube-dns"
+
+  loki:
+    storageConfig:
+      boltdb_shipper:
+        active_index_directory: /var/loki/index
+        cache_location: /var/loki/cache
+        cache_ttl: 24h
+        resync_interval: 5s
+        shared_store: s3
+
+      aws:
+        s3: http://admin:adminadmin@mi.minio.svc:9000/loki
+        s3forcepathstyle: true
+  
+  nameOverride: loki-distributed
+
+  fullnameOverride: loki-distributed
+
+  # ingester:
+  #   extraArgs:
+  #     - "-config.expand-env=true"
+  #   extraEnvFrom:
+  #     - secretRef:
+  #         name: s3-credentials
+
+  # querier:
+  #   extraArgs:
+  #     - "-config.expand-env=true"
+  #   extraEnvFrom:
+  #     - secretRef:
+  #         name: s3-credentials
+
+  # distributor:
+  #   extraArgs:
+  #     - "-config.expand-env=true"
+  #   extraEnvFrom:
+  #     - secretRef:
+  #         name: s3-credentials
+
+  # queryFrontend:
+  #   extraArgs:
+  #     - "-config.expand-env=true"
+  #   extraEnvFrom:
+  #     - secretRef:
+  #         name: s3-credentials
+  
+  # tableManager:
+  #   extraArgs:
+  #     - "-config.expand-env=true"
+  #   extraEnvFrom:
+  #     - secretRef:
+  #         name: s3-credentials

@@ -1,0 +1,9 @@
+---
+- name: role_prepare_workers
+  hosts: workers
+  become: true
+ # serial: 1
+
+  roles:
+    - role: role_worker
+...

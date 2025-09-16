@@ -1,0 +1,8 @@
+---
+- name: role_prepare_client
+  hosts: client
+  become: yes
+
+  roles:
+    - role: role_configure_cluster
+...

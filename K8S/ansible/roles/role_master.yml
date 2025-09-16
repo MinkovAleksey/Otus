@@ -1,0 +1,9 @@
+---
+- name: role_prepare_master
+  hosts: masters
+  become: true
+#  serial: 1
+
+  roles:
+    - role: role_master
+...

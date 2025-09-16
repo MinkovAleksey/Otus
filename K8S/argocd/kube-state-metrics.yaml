@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-state-metrics
+  namespace: argo-cd
+spec:
+  destination:
+    namespace: monitoring
+    name: in-cluster
+  project: otus
+  source:
+    repoURL: git@192.168.0.42:minkovav/otus.git
+    path: argocd/HelmCharts/kube-state-metrics
+    targetRevision: master                            #Ветка
+    helm:
+      valueFiles:
+        - kube-state-metrics-values.yaml
+  syncPolicy:
+    automated:
+      prune   : true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

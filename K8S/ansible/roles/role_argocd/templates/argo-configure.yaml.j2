@@ -1,0 +1,236 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gitea
+  namespace: argo-cd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  url: git@192.168.0.42:minkovav/otus.git
+  project: otus
+  name: gitea
+  type: git
+  sshPrivateKey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    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
+    -----END OPENSSH PRIVATE KEY-----
+  insecure: "true" # Do not perform a host key check for the server. Defaults to "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: shop-app
+  namespace: argo-cd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  url: git@192.168.0.42:minkovav/Shop-app.git
+  project: shop
+  name: shop-app
+  type: git
+  sshPrivateKey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    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
+    -----END OPENSSH PRIVATE KEY-----
+  insecure: "true" # Do not perform a host key check for the server. Defaults to "false"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: otus
+  namespace: argo-cd
+  # Finalizer that ensures that project is not deleted until it is not referenced by any application
+spec:
+  # Project description
+  description: For Otus
+
+  # Allow manifests to deploy from any Git repos
+  sourceRepos:
+  - 'gitea'
+
+  destinations:
+  - namespace: '*'
+    server: '*'
+    name: '*'
+
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: shop
+  namespace: argo-cd
+  # Finalizer that ensures that project is not deleted until it is not referenced by any application
+spec:
+  # Project description
+  description: For Otus
+
+  # Allow manifests to deploy from any Git repos
+  sourceRepos:
+  - 'sho-app'
+
+  destinations:
+  - namespace: '*'
+    server: '*'
+    name: '*'
+
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: main-monitoring
+  namespace: argo-cd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io/background
+  labels:
+    name: main-app-argocd
+spec:
+  project: otus
+  source:
+    repoURL: git@192.168.0.42:minkovav/otus.git
+    targetRevision: HEAD
+    path: argocd
+  destination:
+    # cluster API URL
+    server: https://kubernetes.default.svc
+    # or cluster name
+    # name: in-cluster
+    # The namespace will only be set for namespace-scoped resources that have not set a value for .metadata.namespace
+    namespace: argo-cd
+  syncPolicy:
+    syncOptions:
+    - ApplyOutOfSyncOnly=true
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop-app
+  namespace: argo-cd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io/background
+  labels:
+    name: main-app-argocd
+spec:
+  project: shop
+  source:
+    repoURL: git@192.168.0.42:minkovav/Shop-app.git
+    targetRevision: HEAD
+    path: ./argocd/
+  destination:
+    # cluster API URL
+    server: https://kubernetes.default.svc
+    # or cluster name
+    # name: in-cluster
+    # The namespace will only be set for namespace-scoped resources that have not set a value for .metadata.namespace
+    namespace: argo-cd
+  syncPolicy:
+    syncOptions:
+    - ApplyOutOfSyncOnly=true

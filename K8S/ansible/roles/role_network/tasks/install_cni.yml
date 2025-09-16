@@ -1,0 +1,144 @@
+---
+- name: Creates directory cilium
+  ansible.builtin.file:
+    path: "/root/k8s/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0700
+  loop:
+    - CNI
+    - CNI/cilium
+
+- name: Check that the cilium exists
+  stat:
+    path: /usr/local/bin/cilium
+  register: stat_cilium
+
+- name: Unarchive a file that needs
+  ansible.builtin.unarchive:
+    src: "https://github.com/cilium/cilium-cli/releases/download/{{ CILIUM_CLI_VERSION }}/cilium-linux-amd64.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+  register: install_cilium
+  when: not stat_cilium.stat.exists
+
+- name: Get cilium version
+  ansible.builtin.shell:
+    cmd: cilium version
+  register: cilium_ver
+
+- name: Install cilium
+  ansible.builtin.shell:
+    cmd: cilium install
+  register: cilium_install_output
+  when: cilium_ver.stdout_lines | regex_search("unknown", multiline=True) is not none
+
+# - name: Pause for 3 minutes to build app cache
+#   ansible.builtin.pause:
+#     minutes: 3
+#   when: cilium_install_output is changed
+
+- name: Wait until cilium start
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n kube-system | grep 'cilium-'
+  register: kubectl_get_pods
+  retries: 30
+  delay: 10
+  until: not "0/" in kubectl_get_pods.stdout
+
+- name: Get pods status in namespace kube-system
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n kube-system
+  register: pods_status
+
+- name: Display pods status in namespace kube-system
+  debug:
+    msg: "{{ pods_status.stdout_lines }}"
+
+- name: Get cilium version
+  ansible.builtin.shell:
+    cmd: cilium version
+  register: cilium_ver
+
+- name: Display version cilium
+  debug:
+    msg: "{{ cilium_ver.stdout_lines }}"
+
+- name: Check BGP
+  ansible.builtin.shell:
+    cmd: cilium config view | grep -i bgp
+  register: cilium_bgp
+  failed_when: "cilium_bgp.rc == 2"
+
+- name: Display BGP cilium
+  debug:
+    msg: "{{ cilium_bgp }}"
+
+- name: Enamble BGP
+  ansible.builtin.shell:
+    cmd: cilium config set enable-bgp-control-plane true
+  when: not cilium_bgp.stdout_lines | regex_search("true", multiline=True) is not none
+
+- name: Get first cilium operator
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n kube-system | grep 'cilium-operator' | sed -e 's/\s.*$//'
+  register: cilium_operator
+  when: cilium_install_output is changed
+
+- name: Restrat cilium operator
+  ansible.builtin.shell:
+    cmd: "kubectl delete pod -n kube-system {{ cilium_operator.stdout }}"
+  when: cilium_operator is changed
+
+- name: Make sure service has time to start
+  pause:
+    seconds: 10
+
+- name: Get new cilium operator
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n kube-system | grep 'cilium-operator' | sed -e 's/\s.*$//'
+  register: cilium_operator
+  when: cilium_install_output is changed
+
+- name: Wait until cilium_operator is up
+  ansible.builtin.shell:
+    cmd: "kubectl get pods -n kube-system | grep {{ cilium_operator.stdout }}"
+  register: kubectl_get_cilium_operator_status
+  retries: 30
+  delay: 10
+  until: not "0/" in kubectl_get_cilium_operator_status.stdout
+  when: cilium_operator is changed
+
+- name: Preparte files yaml
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: cilium-bgp-policy.yaml.j2
+      dest: /root/k8s/cilium-bgp-policy.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: cilium-ippool.yaml.j2
+      dest: /root/k8s/cilium-ippool.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+
+- name: Apply cilium-bgp-policy.yaml
+  ansible.builtin.shell:
+    cmd: kubectl apply -f /root/k8s/cilium-bgp-policy.yaml
+
+- name: Apply cilium-ippool.yaml
+  ansible.builtin.shell:
+    cmd: kubectl apply -f /root/k8s/cilium-ippool.yaml
+
+- name: Apply bgp-policy=a
+  ansible.builtin.shell:
+    cmd: "kubectl label nodes {{ item }} bgp-policy=a"
+  with_items: "{{ groups['workers'] }}"
+...

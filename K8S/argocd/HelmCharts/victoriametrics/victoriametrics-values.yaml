@@ -1,0 +1,40 @@
+victoria-metrics-single:
+  rbac:
+    create: false
+    pspEnabled: false
+  serviceAccount:
+    create: false
+  server:
+    priorityClassName: "low-priority"
+    retentionPeriod: 6h
+    extraArgs:
+      selfScrapeInterval: "15s"
+      loggerLevel: "INFO"
+    persistentVolume:
+      storageClass: "data-cold"
+      size: "10Gi"
+    resources:
+      requests:
+        cpu: 200m
+        memory: 500Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+    ingress:
+      enabled: true
+      annotations:
+        certmanager.k8s.io/cluster-issuer: monitoring-issuer
+      hosts:
+        - name: "vm.minkovs.ru"
+          path: /
+          port: 9090
+      tls:
+        - secretName: "mon-tls"
+          hosts:
+            - vm.minkovs.ru
+      ingressClassName: nginx
+    statefulSet:
+      enabled: true
+      podManagementPolicy: Parallel
+    scrape:
+      enabled: false

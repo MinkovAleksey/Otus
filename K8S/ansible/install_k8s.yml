@@ -1,0 +1,15 @@
+---
+- import_playbook: roles/all.yml
+- import_playbook: roles/role_master.yml
+- import_playbook: roles/role_worker.yml
+- import_playbook: roles/role_client.yml
+- import_playbook: roles/role_configure_cluster.yml
+- import_playbook: roles/role_network.yml
+- import_playbook: roles/role_ingress.yml
+- import_playbook: roles/role_cert_manager.yml
+- import_playbook: roles/role_longhorn.yml
+- import_playbook: roles/role_argocd.yml
+- import_playbook: roles/role_opensearch.yml
+- import_playbook: roles/role_jaeger.yml
+- import_playbook: roles/role_finish.yml
+...

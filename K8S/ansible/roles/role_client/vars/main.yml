@@ -1,0 +1,7 @@
+---
+histsize: 10000
+histfilesize: 20000
+histtimeformat: "%d.%m.%Y %H:%M:%S: "
+
+
+...

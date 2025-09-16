@@ -1,0 +1,191 @@
+---
+- name: Apply kubernetes-apt-keyring.gpg
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{ K8S_VERSION }}/deb/Release.key | sudo gpg --yes --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Set a sysctl param vm.max_map_count
+  ansible.posix.sysctl:
+    name: vm.max_map_count
+    value: '262144'
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Install a list of system packages
+  ansible.builtin.apt:
+    pkg:
+    - vim
+    - apt-transport-https
+    - ca-certificates
+    - gpg
+    - ethtool
+    - mc
+    - apache2-utils
+    update_cache: yes
+
+- name: Set a configs master
+  template: 
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: kubernetes.list.j2
+      dest: /etc/apt/sources.list.d/kubernetes.list
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: zshrc.j2
+      dest: /root/.zshrc
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: pod.yml.j2
+      dest: /root/pod.yml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+
+- name: Install a list of K8S packages
+  ansible.builtin.apt:
+    pkg:
+    - kubeadm
+    - kubectl
+    - zsh
+    - git
+    - sshpass
+    update_cache: true
+
+- name: Hold K8S packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubeadm
+    - kubectl
+
+- name: Set time history env vars
+  template:
+    src: templates/history_config.sh.j2
+    dest: /etc/profile.d/history_timestamp.sh
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Get root user's shell
+  ansible.builtin.shell: >
+    grep -E "0:0:" /etc/passwd | awk -F: '{ print $7 }'
+  register: user_shell
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: "OMZ | clone Oh My ZSH repo for user."
+  git:
+    repo: "https://github.com/robbyrussell/oh-my-zsh.git"
+    dest: "/root/.oh-my-zsh"
+    update: "true"
+    accept_hostkey: "true"
+    version: "master"
+  register: "omz_clone"
+  when: "user_shell.stdout != '/usr/bin/zsh'"
+
+- name: "OMZ | add plugin zsh-autosuggestions."
+  git:
+    repo: "https://github.com/zsh-users/zsh-autosuggestions"
+    dest: "/root/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    update: "true"
+    accept_hostkey: "true"
+    version: "master"
+  when: "user_shell.stdout != '/usr/bin/zsh'"
+
+- name: "OMZ | add plugin zsh-bat."
+  git:
+    repo: "https://github.com/fdellwing/zsh-bat.git"
+    dest: "/root/.oh-my-zsh/custom/plugins/zsh-bat"
+    update: "true"
+    accept_hostkey: "true"
+    version: "master"
+  when: "user_shell.stdout != '/usr/bin/zsh'"
+
+- name: "OMZ | add plugin zsh-syntax-highlighting."
+  git:
+    repo: "https://github.com/zsh-users/zsh-syntax-highlighting.git"
+    dest: "/root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+    update: "true"
+    accept_hostkey: "true"
+    version: "master"
+  when: "user_shell.stdout != '/usr/bin/zsh'"
+
+- name: "OMZ | set ownership on newly cloned repository."
+  file:
+    path: "/root/.oh-my-zsh"
+    owner: "root"
+    group: "root"
+    recurse: "true"
+  when: "user_shell.stdout != '/usr/bin/zsh'"
+
+- name: "OMZ | get zsh installed path."
+  shell: "command -v zsh"
+  register: omz_zsh_installed_path
+  changed_when: "false"
+
+- name: "OMZ | set user shell to zsh."
+  user:
+    name: "root"
+    shell: "{{ omz_zsh_installed_path.stdout }}"
+  when: "user_shell.stdout != '/usr/bin/zsh'"
+
+- name: Download oh-my-posh
+  ansible.builtin.get_url:
+    url: 'https://github.com/JanDeDobbeleer/oh-my-posh/releases/download/v{{ OH_MY_POSH_VER }}/posh-linux-amd64'
+    dest: /usr/local/bin/oh-my-posh
+    mode: '0777'
+
+- name: Creates directory .oh-my-posh
+  ansible.builtin.file:
+    path: "/root/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0700
+  loop:
+    - .oh-my-posh
+    - .kube
+    - .oh-my-posh/themes
+    - k8s
+
+- name: Download themes.zip
+  ansible.builtin.get_url:
+    url: https://github.com/JanDeDobbeleer/oh-my-posh/releases/download/v{{ OH_MY_POSH_VER }}/themes.zip
+    dest: /root/.oh-my-posh/themes.zip
+    mode: '0644'
+
+- name: Install oh-my-zsh for root
+  ansible.builtin.shell: |
+      unzip -o /root/.oh-my-posh/themes.zip -d /root/.oh-my-posh/themes/
+      chmod u+rw /root/.oh-my-posh/themes/*.json
+
+- name: Copy the file from the ansible to nodes
+  copy: 
+    src: temp/admin.conf 
+    dest: /root/.kube/config
+    mode: 0600
+
+- name: Check that the HELM exists
+  stat:
+    path: /usr/local/bin/helm
+  register: stat_helm
+
+- name: Install Helm
+  ansible.builtin.unarchive:
+    src: "https://get.helm.sh/helm-v{{ HELM_VER }}-linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: yes
+  when: not stat_helm.stat.exists
+
+- name: Helm copy to /usr/local/bin
+  command: mv /tmp/linux-amd64/helm /usr/local/bin/helm
+  when: not stat_helm.stat.exists
+...

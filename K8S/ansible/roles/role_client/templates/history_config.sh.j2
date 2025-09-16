@@ -1,0 +1,9 @@
+export HISTSIZE={{ histsize }}
+export HISTFILESIZE={{ histfilesize }}
+
+export HISTTIMEFORMAT='{{ histtimeformat }}'
+
+export HISTCONTROL=ignoreboth:erasedups
+export HISTIGNORE='ls:ps:history*'
+
+PROMPT_COMMAND='history -a'

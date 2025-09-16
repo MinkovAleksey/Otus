@@ -1,0 +1,8 @@
+---
+- name: role_longhorn
+  hosts: client
+  become: true
+
+  roles:
+    - role: role_longhorn
+...

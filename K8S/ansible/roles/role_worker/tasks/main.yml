@@ -1,0 +1,4 @@
+---
+- import_tasks: prepare_configs.yml
+- import_tasks: join_worker_nodes.yml
+...

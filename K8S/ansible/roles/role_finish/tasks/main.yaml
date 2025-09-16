@@ -1,0 +1,66 @@
+---
+- name: Check ArgCD app
+  ansible.builtin.uri:
+    url: 'http://argocd.{{ DOMAIN }}'
+    return_content: true
+    validate_certs: false
+    status_code:
+      - 200
+  until: uri_output_argocd.status == 200
+  retries: 100 # Пофторять 100 * 5 секунд = 500 секунд = 6 минут
+  delay: 5 # каждые 5 секунд
+  register: uri_output_argocd
+
+- name: Check ArgCD
+  ansible.builtin.debug:
+    msg: "Зайдите на сайт http://argocd.{{ DOMAIN }} в приложение Applications main-monitoring -> REFRESH -> SYNC"
+
+- name: Check Grafana app
+  ansible.builtin.uri:
+    url: 'https://grafana.{{ DOMAIN }}'
+    return_content: yes
+    validate_certs: no
+    status_code:
+      - 200
+  until: uri_output_grafana.status == 200
+  retries: 100 # Пофторять 100 * 5 секунд = 500 секунд = 6 минут
+  delay: 5 # каждые 5 секунд
+  register: uri_output_grafana
+
+- name: Check Grafana
+  ansible.builtin.debug:
+    msg: "Grafana доступна по https://grafana.{{ DOMAIN }}"
+
+- name: Check Minio app
+  ansible.builtin.uri:
+    url: 'https://minio.{{ DOMAIN }}'
+    return_content: yes
+    validate_certs: no
+    status_code:
+      - 200
+  until: uri_output_minio.status == 200
+  retries: 100 # Пофторять 100 * 5 секунд = 500 секунд = 6 минут
+  delay: 5 # каждые 5 секунд
+  register: uri_output_minio
+
+- name: Check Minio
+  ansible.builtin.debug:
+    msg: "Grafana доступна по http://minio.{{ DOMAIN }}"
+
+- name: Check Victoriametrics app
+  ansible.builtin.uri:
+    url: 'https://vm.{{ DOMAIN }}'
+    return_content: yes
+    validate_certs: no
+    status_code:
+      - 200
+  until: uri_output_victoriametrics.status == 200
+  retries: 100 # Пофторять 100 * 5 секунд = 500 секунд = 6 минут
+  delay: 5 # каждые 5 секунд
+  register: uri_output_victoriametrics
+
+- name: Check Victoriametrics
+  ansible.builtin.debug:
+    msg: "Grafana доступна по https://vm.{{ DOMAIN }}"
+
+...

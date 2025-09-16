@@ -1,0 +1,67 @@
+---
+- name: Check argocd repo
+  ansible.builtin.shell:
+    cmd: helm repo list | grep argo
+  register: argocd_repo_status
+  ignore_errors: true
+  changed_when: false
+
+- name: Display argocd_repo_status
+  debug:
+    msg: "{{ argocd_repo_status }}"
+
+- name: Add helm repository for the argocd
+  ansible.builtin.shell:
+    cmd: helm repo add argo https://argoproj.github.io/argo-helm
+  register: need_update
+  when: 'not "argo" in argocd_repo_status.stdout'
+  changed_when: false
+
+- name: Update helm repository
+  ansible.builtin.shell:
+    cmd: helm repo update
+  when: need_update.changed
+  changed_when: false
+
+- name: generate passwd
+  ansible.builtin.shell:
+    cmd: "htpasswd -nbBC 10 '' {{ ARGOCD_PASS }} | tr -d ':\n' | sed 's/$2y/$2a/'"
+  register: argo_htpasswd
+  changed_when: false
+
+- name: Set a configs
+  ansible.builtin.template: 
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: argo-values.yaml.j2
+      dest: /root/k8s/argo-values.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+    - src: argo-configure.yaml.j2
+      dest: /root/k8s/argo-configure.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+
+- name: Check argocd
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n argo-cd
+  register: argocd_status
+  changed_when: false
+
+- name: Install ArgoCD from helm
+  ansible.builtin.shell:
+    cmd: helm install argo argo/argo-cd -f /root/k8s/argo-values.yaml --namespace argo-cd --create-namespace
+  when: "'No ' in argocd_status.stderr"
+  changed_when: false
+
+- name: Configure ArgoCD 
+  ansible.builtin.shell:
+    cmd: kubectl apply -f /root/k8s/argo-configure.yaml -n argo-cd
+  changed_when: false
+...

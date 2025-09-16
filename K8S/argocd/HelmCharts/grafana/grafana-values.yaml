@@ -1,0 +1,91 @@
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    certmanager.k8s.io/cluster-issuer: monitoring-issuer
+  hosts:
+    - host: grafana.minkovs.ru
+      paths:
+      - path: /
+        pathType: Prefix
+  tls:
+    - hosts:
+      - grafana.minkovs.ru
+      secretName: grafana-tls
+
+grafana:
+
+  sidecar:
+    dashboards:
+      enabled: true
+    datasources:
+      enabled: true
+
+  revisionHistoryLimit: 3
+  testFramework:
+    enabled: false
+  ingress:
+    enabled: false
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1024Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  persistence:
+    type: pvc
+    enabled: true
+    storageClassName: data-cold
+    accessModes:
+      - ReadWriteOnce
+    size: 2Gi
+  adminUser: admin
+  adminPassword: admin          # Пароль для входа в Grafana первый раз
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: Victoria
+        type: prometheus
+        url: http://victoriametrics-victoria-metrics-single-server:8428
+        access: proxy
+        isDefault: true
+      - name: Loki
+        type: loki
+        url: http://loki-distributed-gateway
+        access: proxy
+
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+      - name: 'default-1'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default-1
+      - name: 'default-2'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default-2
+      - name: 'default-3'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default-3
+
+  dashboardsConfigMaps:
+    default-1: "grafana-dashboards-1"
+    default-2: "grafana-dashboards-2"
+    default-3: "grafana-dashboards-3"

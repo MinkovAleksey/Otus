@@ -1,0 +1,100 @@
+---
+- name: Check ingress-nginx
+  ansible.builtin.shell:
+    cmd: kubectl get pods -n ingress-nginx
+  register: ingress_nginx_status
+
+- name: Set a configs
+  template: 
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: ingress_values.yaml.j2
+      dest: /root/k8s/ingress_values.yaml
+      owner: root
+      group: root
+      mode: u=rw,g=r,o=r
+
+- name: Display ingress_nginx_status
+  debug:
+    msg: "{{ ingress_nginx_status }}"
+
+- name: Check namespace
+  ansible.builtin.shell:
+    cmd: kubectl get namespaces
+  register: ingress_nginx_namespaces
+
+- name: Display ingress_nginx_namespaces
+  debug:
+    msg: "{{ ingress_nginx_namespaces }}"
+
+- name: Create a namespace
+  ansible.builtin.shell:
+    cmd: kubectl create namespace ingress-nginx
+  when: "'ingress-nginx' not in ingress_nginx_namespaces.stdout"
+
+- name: Check ingress-nginx repo
+  ansible.builtin.shell:
+    cmd: helm repo list | grep ingress-nginx
+  register: ingress_nginx_repo_status
+  ignore_errors: true
+
+- name: Display ingress_nginx_repo_status
+  debug:
+    msg: "{{ ingress_nginx_repo_status }}"
+
+- name: Add helm repository for the nginx Controller
+  ansible.builtin.shell:
+    cmd: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+  register: need_update
+  when: 'not "ingress-nginx" in ingress_nginx_repo_status.stdout'
+
+- name: Update helm repository
+  ansible.builtin.shell:
+    cmd: helm repo update
+  when: need_update is changed
+
+- name: Install ingress-nginx
+  ansible.builtin.shell:
+    cmd: >-
+      helm install ingress-nginx ingress-nginx/ingress-nginx 
+      --namespace ingress-nginx
+      --create-namespace
+      --values /root/k8s/ingress_values.yaml
+      --version "{{ INGRESS_CHART_VERSION_VER }}"
+  when: "'No ' in ingress_nginx_status.stderr"
+
+- name: Upgrade ingress-nginx
+  ansible.builtin.shell:
+    cmd: >-
+      helm upgrade ingress-nginx ingress-nginx/ingress-nginx 
+      --namespace ingress-nginx
+      --create-namespace
+      --values /root/k8s/ingress_values.yaml
+      --version "{{ INGRESS_CHART_VERSION_VER }}"
+  when: "not 'No ' in ingress_nginx_status.stderr"
+
+- name: Gat taints
+  ansible.builtin.shell:
+    cmd: kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints --no-headers | grep ^m
+  register: taints
+
+- name: Parse taints
+  set_fact:
+    node_taints: "{{ node_taints | default({}) | combine({ item.split()[0]: item.split()[1:] }) }}"
+  with_items: "{{ taints.stdout_lines }}"
+
+- name: Debuging
+  debug:
+    msg: "{{ node_taints[item] }}"
+  with_items: "{{ groups['masters'] }}"
+
+- name: Taint masters nodes NoSchedule
+  ansible.builtin.shell:
+    cmd: "kubectl taint nodes {{ item }} node-role.kubernetes.io/master=:NoSchedule"
+  with_items: "{{ groups['masters'] }}"
+  when: not node_taints[item] | regex_search("NoSchedule", multiline=True) is not none
+...

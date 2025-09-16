@@ -1,0 +1,69 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: homer-ing
+spec:
+  ingressClassName: "nginx"
+  rules:
+    - host: "dashboard.minkovs.ru"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: homer-svc
+                port:
+                  name : http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homer-svc
+spec:
+  ports:
+    - port: 8080
+      name: http
+  selector:
+    app: homer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homer
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: homer
+  template:
+    metadata:
+      labels:
+        app: homer
+    spec:
+      containers:
+        - image: 192.168.0.14:5010/homer-configured
+          name: homer
+          env:
+            -  name: IPV6_DISABLE
+               value: "1"
+            -  name: INIT_ASSETS
+               value: "1"
+            -  name: PORT
+               value: "8080"
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 500m
+              memory: 400Mi
+            requests:
+              cpu: 250m
+              memory: 200Mi

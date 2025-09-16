@@ -1,0 +1,7 @@
+---
+- name: role_cert_manager
+  hosts: client
+  become: yes
+
+  roles:
+    - role: role_cert_manager
