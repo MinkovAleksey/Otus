@@ -2,6 +2,7 @@ import os
 
 from loger import logger
 from arg_parser import parser
+import exceptions
 
 
 if __name__ == '__main__':
